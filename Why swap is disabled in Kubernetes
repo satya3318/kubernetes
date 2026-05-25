@@ -1,0 +1,103 @@
+In Kubernetes, swap is usually disabled because Kubernetes expects predictable memory behavior from the operating system. If swap is enabled, the Linux kernel may move application memory from RAM to disk, which can create performance and stability issues for containers and cluster components.
+
+Main reasons to disable swap
+1. Predictable pod performance
+
+Kubernetes schedules workloads based on available CPU and RAM.
+If swap is enabled:
+
+A pod may appear to have enough memory
+But some memory pages may actually be swapped to disk
+Accessing swapped memory is much slower than RAM
+
+This causes:
+
+Slow applications
+Random latency spikes
+Unpredictable pod behavior
+2. Kubernetes memory limits become unreliable
+
+Kubernetes uses:
+
+requests → guaranteed resources
+limits → maximum allowed memory
+
+With swap enabled:
+
+A container may exceed physical RAM usage
+The kernel may swap instead of triggering OOM (Out Of Memory)
+
+This breaks Kubernetes resource management logic.
+
+3. Prevent node instability
+
+When Linux starts heavy swapping:
+
+Disk I/O increases drastically
+System becomes sluggish
+kubelet, container runtime, or etcd may hang
+
+In severe cases:
+
+Node becomes NotReady
+Pods get evicted
+Cluster instability occurs
+
+This condition is often called swap thrashing.
+
+4. Kubelet requirement
+
+By default, the Kubernetes kubelet refuses to start if swap is enabled.
+
+You may see errors like:
+
+Running with swap on is not supported
+
+That is why most Kubernetes installation guides include:
+
+swapoff -a
+
+and removal/commenting of swap entries from:
+
+/etc/fstab
+Example
+
+Suppose:
+
+Node RAM = 16GB
+Pods consume 15GB
+System starts swapping 4GB to disk
+
+Now:
+
+Applications slow down badly
+Read/write latency increases
+Health probes may fail
+Kubernetes may restart healthy pods thinking they are unhealthy
+Modern Kubernetes support for swap
+
+Newer versions of Kubernetes have limited swap support using:
+
+--fail-swap-on=false
+
+and configurable swap behavior.
+
+But for production clusters, best practice is still:
+
+Disable swap
+Use proper memory requests/limits
+Use node sizing correctly
+How to check swap
+swapon --show
+free -h
+Disable swap temporarily
+swapoff -a
+Disable permanently
+
+Edit /etc/fstab and comment the swap line:
+
+# /swap.img none swap sw 0 0
+
+Then reboot or run:
+
+swapoff -a
