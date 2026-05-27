@@ -1,0 +1,18 @@
+root@kvm-node1 ~]# kubectl get clusterrole system:kube-apiserver-to-kubelet --kubeconfig /admin.kubeconfig 
+NAME                               CREATED AT
+system:kube-apiserver-to-kubelet   2026-05-26T10:27:52Z
+[root@kvm-node1 ~]# kubectl describe clusterrole system:kube-apiserver-to-kubelet --kubeconfig /admin.kubeconfig 
+Name:         system:kube-apiserver-to-kubelet
+Labels:       kubernetes.io/bootstrapping=rbac-defaults
+Annotations:  rbac.authorization.kubernetes.io/autoupdate: true
+PolicyRule:
+  Resources      Non-Resource URLs  Resource Names  Verbs
+  ---------      -----------------  --------------  -----
+  nodes/log      []                 []              [*]
+  nodes/metrics  []                 []              [*]
+  nodes/proxy    []                 []              [*]
+  nodes/spec     []                 []              [*]
+  nodes/stats    []                 []              [*]
+[root@kvm-node1 ~]# 
+[root@kvm-node1 ~]# 
+[root@kvm-node1 ~]# 
