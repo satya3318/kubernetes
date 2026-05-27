@@ -282,3 +282,8 @@ Node reconnects to cluster
 DaemonSet controller checks node
 Required DaemonSet Pods start automatically again
 
+*** Can i use deamonsets for normal application pod ***
+
+Yes, Kubernetes technically allows you to run normal applications using a DaemonSet, but in most cases it is not the correct choice.
+
+Use a DaemonSet only when the application must run on every node (or specific nodes).
