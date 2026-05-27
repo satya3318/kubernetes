@@ -1,0 +1,69 @@
+PodDisruptionBudget:
+--------------------
+
+PodDisruptionBudget, or PDB for short, is a capability offered by Kubernetes that allows developers to prevent pods from deleting until someone (a person or a controller) MANUALLY destroys them, or there is an unavoidable hardware or system software error.
+
+Have you ever experienced the frustration of your Kubernetes workloads being disrupted due to node maintenance or failures? When nodes are taken down for maintenance or experience failures, the pods running on them are terminated and rescheduled on other nodes. This can lead to decreased availability and potential data loss or downtime. But fear not, because there is a powerful Kubernetes feature that can help you manage disruptions and maintain high availability — Pod Disruption Budgets (PDBs).
+
+What are Pod Disruption Budgets?
+PDBs can be applied to a specific workload, such as a Deployment or StatefulSet, or to a group of workloads using a label selector. They can also be configured to tolerate different types of disruptions, such as maintenance events or node failures. 
+
+*** IMP: PDBs are a powerful feature for ensuring high availability in a Kubernetes environment, and their use is strongly recommended in production environments.PDBs specify a minimum availability for a particular type of pod, which is called the “target size”. 
+
+This means that at least a certain number of replicas of a particular type of pod must be running at any given time. If the number of running replicas falls below the target size, Kubernetes will prevent further disruptions to the remaining replicas until the target size is met.
+
+PDBs are used to ensure that workloads are not affected by these events and can continue to run uninterrupted. When a disruption occurs, Kubernetes will attempt to gracefully evict pods from the affected node(s) in order to maintain the desired number of replicas specified in the PDB.
+
+********************************************************
+******* Deep Dive into Pod Disruption Budgets ***********
+*********************************************************
+Let’s take a deeper look at how PDBs work and when they should be used: 
+When you create a PDB, you specify a minimum available replica count and a selector that identifies the set of pods to which the PDB applies. The selector can be based on labels or annotations that are attached to the pods. When a disruption occurs, Kubernetes will first attempt to evict pods that do not match the selector specified in the PDB. This ensures that only the workloads that are specified in the PDB are affected by the disruption.
+
+Once Kubernetes has identified the set of pods that are subject to the PDB, it will attempt to gracefully evict them from the affected node(s). The eviction process follows a specific sequence to ensure that workloads are not disrupted. First, Kubernetes will attempt to gracefully terminate any connections to the pod, such as open network connections or active requests. Next, it will send a SIGTERM signal to the pod’s container, giving it a chance to gracefully shut down. If the container does not terminate within a specified period of time, Kubernetes will send a SIGKILL signal to force the container to shut down.
+
+The PDB also specifies a disruption budget, which is the maximum number of pods that can be evicted at any given time. This ensures that Kubernetes does not evict more pods than can be safely accommodated by the remaining nodes. The disruption budget can be specified as an absolute number or as a percentage of the total number of replicas for the workload.
+
+How to Use Pod Disruption Budgets
+To use Pod Disruption Budgets, you need to define a PDB object in your Kubernetes cluster. PDBs are defined using YAML or JSON files and are created using the kubectl apply command.
+
+Here’s an example of a PDB that sets the target size to 2 for a deployment named “my-deployment” in the “my-namespace”
+
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: my-pdb
+  namespace: my-namespace
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+    app: my-deployment
+In this example, the PDB is named “my-pdb” and applies to the “my-namespace” namespace. The minAvailable field is set to 2, which means that at least 2 replicas of the deployment must be available at all times. The selector field is used to specify the pods that the PDB applies to. In this case, it applies to all pods with the label app:my-deployment.
+
+You can also specify the maximum number of pods that can be disrupted simultaneously using the maxUnavailable field. For example, if you have a deployment with 4 replicas and set the maxUnavailable field to 1, Kubernetes will not allow more than 1 replica to be disrupted at a time.
+
+Here’s an example of a PDB that sets the target size to 2 and the maximum number of unavailable replicas to 1 for a deployment named “my-deployment” in the “my-namespace” namespace:
+
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+  metadata:
+  name: my-pdb
+namespace: my-namespace
+spec:
+  minAvailable: 2
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+    app: my-deployment
+
+PDBs can also be used with stateful sets and daemon sets. For stateful sets, PDBs ensure that a minimum number of replicas are available during stateful set scaling events, such as scaling up or down. For daemon sets, PDBs ensure that a minimum number of nodes are available during node maintenance or failures.
+
+Benefits of Using Pod Disruption Budgets" 
+Using Pod Disruption Budgets has several benefits, including:
+
+1. Maintaining high availability: PDBs ensure that a minimum number of replicas are available at all times, which helps maintain the high availability of critical workloads during node maintenance or failures.
+2. Automated management of disruptions: PDBs automate the management of disruptions to workloads during node maintenance or failures, reducing the need for manual intervention.
+3. Improved cluster stability: By preventing too many replicas from being disrupted simultaneously, PDBs can help improve the stability of your Kubernetes cluster.
+4. Cost savings: By ensuring the high availability of critical workloads, PDBs can help reduce downtime and data loss, which can be costly to businesses.
+Conclusion
