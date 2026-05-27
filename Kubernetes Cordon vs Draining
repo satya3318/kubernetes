@@ -1,0 +1,284 @@
+In Kubernetes (and Amazon EKS), draining and cordoning are used for managing workloads during node maintenance or upgrades.
+
+Some popular use cases can be:
+A. Node Maintenance: Update or patch the underlying EC2 instance.
+B. Node Replacement: Migrate workloads to a new node.
+C. Cluster Scaling: Decommission nodes during downscaling.
+
+# Cordoning a Node
+1. Cordoning a node marks it as unschedulable, preventing new pods from being assigned to the node. Existing pods continue to run.
+
+Command to Cordon a Node:
+kubectl cordon <node-name>
+Example:
+
+kubectl cordon ip-192-168-0-123.ec2.internal
+Output might look like: node/ip-192–168–0–123.ec2.internal cordoned
+
+Effect:
+New pods are not scheduled on the node.
+Existing pods remain unaffected.
+
+2. Draining an EKS Node
+Draining a node evicts all non-daemonset pods from it, ensuring the workloads are safely migrated to other nodes before maintenance.
+
+Command to Drain a Node:
+kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data
+Flags:
+
+--ignore-daemonsets: DaemonSet-managed pods are not evicted.
+--delete-emptydir-data: Deletes pods with emptyDir volumes (temporary storage).
+Exmaple:
+
+kubectl drain ip-192-168-0-123.ec2.internal --ignore-daemonsets --delete-emptydir-data
+Output might look something like node/ip-192–168–0–123.ec2.internal drained
+
+Effect:
+Evicts all non-daemonset pods.
+Marks the node as unschedulable.
+DaemonSet pods remain running on the node.
+
+** Error Handling **
+Some Popular Error handling scenarios and possible solutions :
+
+Error 1: Pod Stuck During Draining:
+
+Use --force and --grace-period=0 to forcibly evict pods:
+kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data --force --grace-period=0
+
+Error 2: DaemonSet Pods on the Node:
+
+DaemonSet pods are ignored by default with --ignore-daemonsets.
+
+Error3: Unschedulable Pods:
+
+Ensure the cluster has sufficient resources to reschedule evicted pods.
+
+**** Common kubectl commands ****
+# Step 1: List all nodes to identify the node for maintenance
+kubectl get nodes
+
+# Step 2: Cordon the node to prevent new pods from being scheduled
+NODE_NAME="ip-192-168-0-123.ec2.internal"  # Replace with your node name
+kubectl cordon $NODE_NAME
+echo "Node $NODE_NAME cordoned."
+
+# Step 3: Verify the node is cordoned
+kubectl get nodes | grep $NODE_NAME
+
+# Step 4: Drain the node to evict all non-daemonset pods
+kubectl drain $NODE_NAME --ignore-daemonsets --delete-emptydir-data
+echo "Node $NODE_NAME drained."
+
+# Step 5: Verify all pods are evicted from the node
+kubectl get pods --all-namespaces --field-selector spec.nodeName=$NODE_NAME
+
+# Optional: Describe the node to confirm taints and unschedulable status
+kubectl describe node $NODE_NAME
+
+# Step 6: Perform maintenance on the node (manual step)
+
+# Step 7: Uncordon the node after maintenance to allow scheduling
+kubectl uncordon $NODE_NAME
+echo "Node $NODE_NAME uncordoned."
+
+# Step 8: Watch the node and pod status for confirmation
+kubectl get nodes -w  # Watch for node status
+kubectl get pods --all-namespaces -o wide | grep $NODE_NAME  # Monitor pod reschedu
+
+**** What is a DaemonSet? ****
+
+In Kubernetes, a DaemonSet is a controller that:
+
+- Automatically deploys a Pod on all worker nodes
+- Ensures new nodes also get that Pod
+- Removes the Pod if the node is removed
+- Why DaemonSet is Used
+
+DaemonSets are used for services that must run on:
+
+Every node (or a group of nodes), These are usually:
+
+Monitoring agents
+Log collectors
+Networking components
+Storage agents
+Security agents
+
+Common Real-World Examples
+Use Case	Example
+Log collection	Fluentd, Filebeat
+Monitoring	Node Exporter, Datadog Agent
+Networking	Calico, Flannel, Cilium
+Storage	Ceph agents
+Security	Falco
+Kubernetes system services	kube-proxy
+
+*** Example ***
+
+Suppose you have 5 worker nodes. If you create a DaemonSet:
+
+Kubernetes runs:
+1 Pod on node1
+1 Pod on node2
+1 Pod on node3
+1 Pod on node4
+1 Pod on node5
+
+If a new node joins: Pod is automatically created there too.
+
+*** Why Normal Deployment is Not Enough ***
+
+A Deployment may place Pods randomly.
+Example:
+
+3 Pods → all may run on same node
+
+But some services need:
+
+1 Pod per node, That is why DaemonSet exists.
+
+Example YAML
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+  template:
+    metadata:
+      labels:
+        app: fluentd
+    spec:
+      containers:
+      - name: fluentd
+        image: fluent/fluentd
+
+- How to View DaemonSets ?
+# kubectl get daemonsets -A
+
+or
+
+kubectl get ds -A
+How DaemonSet Pods Look
+kubectl get pods -o wide
+
+You will notice:
+
+Same Pod running on many nodes
+
+Example:
+
+fluentd-abc12   Running   worker1
+fluentd-def34   Running   worker2
+fluentd-ghi56   Running   worker3
+
+# Why Drain Ignores DaemonSet Pods
+
+When you run:
+
+kubectl drain node1
+
+Kubernetes refuses to delete DaemonSet Pods because:
+
+They are system-level Pods
+They are expected to exist on every node
+Controller recreates them automatically
+
+So usually we use:
+
+kubectl drain node1 --ignore-daemonsets
+
+This tells Kubernetes:
+
+“Ignore system DaemonSet Pods while draining.”
+
+Real Example
+
+Suppose node has:
+
+Pod	              Type
+nginx-app	        Deployment
+mysql	            StatefulSet
+calico-node	      DaemonSet
+kube-proxy	      DaemonSet
+
+In many clusters you will see:
+
+kube-proxy
+calico-node
+flannel
+cilium
+node-exporter
+
+These are usually DaemonSets.
+
+Quick Summary
+
+DaemonSet means:
+
+“Run this Pod on every node automatically.”
+
+Used mainly for:
+
+Monitoring
+Logging
+Networking
+Storage
+Security agents
+
+*** What will happen to DeamonSet pods after draining ***.
+DaemonSet Pods do not stop node maintenance. Kubernetes handles them differently from normal application Pods.
+
+What Happens During Drain
+
+When you run:
+
+kubectl drain worker-node1 --ignore-daemonsets
+
+Kubernetes does:
+
+- Cordon the node
+- No new Pods scheduled
+- Evict normal Pods, Deployments, StatefulSets, ReplicaSets, etc.
+- Ignore DaemonSet Pods, They remain running on the node,
+
+*** Why DaemonSet Pods Are Ignored **
+
+Because they are:
+
+Node-specific system services
+Expected to run on every node
+Automatically recreated by DaemonSet controller
+
+*** During Reboot or Shutdown ***
+
+Suppose you reboot the node after drain. What happens?
+
+Before reboot
+
+Application Pods already moved to other nodes.
+
+DaemonSet Pods still exist on the node.
+
+Node goes down
+
+All Pods on that node stop:
+
+Normal Pods already evacuated
+DaemonSet Pods also stop because node is OFF
+
+Cluster marks node:
+
+NotReady
+After Node Comes Back
+
+When node boots again:
+
+Kubelet starts
+Node reconnects to cluster
+DaemonSet controller checks node
+Required DaemonSet Pods start automatically again
+
