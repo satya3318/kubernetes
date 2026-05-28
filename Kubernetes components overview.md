@@ -2,38 +2,22 @@
 **** Kubernetes Architecture Overview ****
 ******************************************
 ![IMG](https://github.com/satya3318/kubernetes/blob/main/Screenshot%202026-05-28%20143729.png)
-Kubernetes mainly has two parts:
 
+What is Kubernets:
+Kubernetes, often abbreviated as K8s, is an open-source container orchestration platform that automates the deployment, scaling, and management of containerized applications. It provides a framework to efficiently manage the complexities of deploying and running applications in containers across a cluster of machines.
+
+Kubernetes mainly has two parts:
 1. Control Plane (Master Node)
 2. Worker Nodes
-+-------------------------------------------------------------------------+
-|                                                                         |
-|                              CONTROL PLANE                              |
-|                                                                         |
-|  +------------------+     +------------------+     +-----------------+  |
-|  | kube-apiserver   |<--->|  kube-scheduler  |     | kube-controller |  |
-|  +------------------+     +------------------+     |     manager     |  |
-|        ^     ^                                     +-----------------+  |
-|        |     |            +------------------+                          |
-|        v     +----------->|       etcd       |                          |
-|   ( kubectl / UI )        +------------------+                          |
-+--------|----------------------------------------------------------------+
-         |
-         | (Communicates via TLS)
-         v
-+--------|----------------------------------------------------------------+
-|        v                     WORKER NODE                                |
-|  +------------------+     +------------------+     +-----------------+  |
-|  |     kubelet      |     |    kube-proxy    |     |    Container    |  |
-|  +------------------+     +------------------+     |     Runtime     |  |
-|        |                                           +--------|--------+  |
-|        v                                                    v           |
-|  +-------------------------------------------------------------------+  |
-|  | [ Pod ] ---> Contains Application Containers (e.g., containerd)    |  |
-|  +-------------------------------------------------------------------+  |
-+-------------------------------------------------------------------------+
 
+— CONTROL PLANE:
+The master control plane is the central management unit of a Kubernetes cluster. It oversees the entire cluster’s operation and coordination, making high-level decisions about how applications should run and ensuring that the actual state of the cluster matches the desired state.
 
+1. API Server:The API Server acts as the entry point for interactions with the Kubernetes cluster. It exposes the Kubernetes API, which allows users, administrators, and other components to communicate with the cluster.
 
-1. Control Plane (Master Node)
-The Control Plane (Master Components)The Control Plane acts as the global brain of the cluster, maintaining the overall system health, scheduling workloads, and processing cluster events.kube-apiserver: The front door of the architecture that exposes the official Kubernetes API. It intercepts all command-line operations (from tools like kubectl), intercepts internal node traffic, and strictly handles request authentication, authorization, and validation.etcd: A highly available, distributed key-value store used as the backing storage engine. It serves as the single source of truth for all configuration and state records across the deployment.kube-scheduler: The optimization engineer that watches for newly created application pods that lack an assigned host node. It evaluates resource footprints, policy limitations, and affinity constraints to select the ideal worker node to execute them.kube-controller-manager: The core regulator process running various distinct background controllers. It continuously reviews the state of the cluster against your specified target configurations, managing node disruptions, replication loops, and active endpoints.cloud-controller-manager: A specialized controller that embeds cloud-provider-specific logic. It links your cluster directly to third-party services like cloud load balancers and storage volumes without polluting the core code.
+2. etcd:etcd is a distributed key-value store that serves as Kubernetes’ backing store for all cluster data. It holds the configuration data and the state of the entire cluster. This includes information about Pods, Services, replication settings, and more.
+
+3. Controller Manager:The Controller Manager is responsible for monitoring the state of various objects in the cluster and taking corrective actions to ensure the desired state is maintained. It includes several built-in controllers, such as the Replication Controller, Deployment Controller, and StatefulSet Controller.
+
+4. Scheduler:The Scheduler is responsible for placing Pods onto suitable worker nodes. It takes into account factors like resource availability, constraints, and optimization goals.
+
