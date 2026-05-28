@@ -1,0 +1,171 @@
+**** How to migrate etcd from http to https ****
+
+1: Create etcd Server Key
+# openssl genrsa -out etcd-server.key 4096
+
+2: Create CSR
+
+# openssl req -new -key etcd-server.key -subj "/CN=etcd" -out etcd-server.csr
+
+3: Create SAN File
+
+Very important.
+cat > etcd-server.cnf <<EOF
+subjectAltName = IP:127.0.0.1,DNS:localhost
+EOF
+
+4: Sign Certificate Using Existing CA
+# openssl x509 -req \
+  -in etcd-server.csr \
+  -CA ca.crt \
+  -CAkey ca.key \
+  -CAcreateserial \
+  -out etcd-server.crt \
+  -days 3650 \
+  -extfile etcd-server.cnf
+
+5. Result
+
+You now have:
+
+etcd-server.crt
+etcd-server.key
+
+
+6. Copy Certificates
+
+Example:
+
+cp ca.crt /var/lib/etcd/
+cp etcd-server.crt /var/lib/etcd/
+cp etcd-server.key /var/lib/etcd/
+cp kube-api-server.crt /var/lib/etcd/
+cp kube-api-server.key /var/lib/etcd/
+
+7 — Modify etcd Service
+
+Find etcd service:
+
+systemctl cat etcd
+
+or:
+
+cat /etc/systemd/system/etcd.service
+Change These Lines
+
+FROM:
+
+--listen-client-urls=http://127.0.0.1:2379
+--advertise-client-urls=http://127.0.0.1:2379
+
+TO:
+--listen-client-urls=https://127.0.0.1:2379
+--advertise-client-urls=https://127.0.0.1:2379
+
+Add TLS Parameters
+
+Add these:
+--cert-file=/var/lib/etcd/etcd-server.crt
+--key-file=/var/lib/etcd/etcd-server.key
+--trusted-ca-file=/var/lib/etcd/ca.crt
+--client-cert-auth=true
+
+8: Restart etcd
+systemctl daemon-reload
+systemctl restart etcd
+
+systemctl status etcd
+
+9: Test etcd TLS
+
+Export variables:
+
+export ETCDCTL_API=3
+export ETCDCTL_CACERT=/var/lib/etcd/ca.crt
+export ETCDCTL_CERT=/var/lib/etcd/kube-api-server.crt
+export ETCDCTL_KEY=/var/lib/etcd/kube-api-server.key
+
+Test:
+# etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  endpoint health
+
+Expected:
+
+https://127.0.0.1:2379 is healthy
+Step 6 — Modify kube-apiserver
+
+10: Edit kube-apiserver systemd service.
+
+Change:
+
+--etcd-servers=http://127.0.0.1:2379
+
+TO:
+
+--etcd-servers=https://127.0.0.1:2379
+Add These Parameters
+--etcd-cafile=/var/lib/etcd/ca.crt
+
+--etcd-certfile=/var/lib/etcd/kube-api-server.crt
+
+--etcd-keyfile=/var/lib/etcd/kube-api-server.key
+Final API Server Config
+--etcd-servers=https://127.0.0.1:2379
+--etcd-cafile=/var/lib/etcd/ca.crt
+--etcd-certfile=/var/lib/etcd/kube-api-server.crt
+--etcd-keyfile=/var/lib/etcd/kube-api-server.key
+Step 7 — Restart API Server
+systemctl restart kube-apiserver
+
+systemctl status kube-apiserver
+Step 8 — Verify Cluster
+
+# kubectl get nodes
+
+If nodes appear:
+
+TLS migration successful
+
+Very Important Understanding
+
+You are using:
+
+kube-api-server.crt
+
+as:
+
+etcd client certificate
+
+This is acceptable because:
+
+it is signed by same CA
+etcd trusts that CA
+mutual TLS succeeds
+Architecture After Migration
+kube-apiserver
+     |
+     | HTTPS + mTLS
+     |
+     v
+etcd
+Best Practice in Production
+
+Usually production creates:
+
+apiserver-etcd-client.crt
+
+separately instead of reusing kube-api-server.crt.
+
+But for learning/lab:
+
+Reusing kube-api-server cert is fine
+Most Important Learning
+
+To enable secure etcd communication you need:
+
+etcd HTTPS listener
+trusted CA
+client certificate authentication
+API server TLS configuration
+matching CA trust on both sides
