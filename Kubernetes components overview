@@ -1,7 +1,7 @@
 ******************************************
 **** Kubernetes Architecture Overview ****
 ******************************************
-![Alt text](Screenshot 2026-05-28 143729.png)
+![IMG](https://github.com/satya3318/kubernetes/blob/main/Screenshot%202026-05-28%20143729.png)
 Kubernetes mainly has two parts:
 
 1. Control Plane (Master Node)
