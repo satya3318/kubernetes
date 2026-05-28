@@ -1,0 +1,39 @@
+******************************************
+**** Kubernetes Architecture Overview ****
+******************************************
+
+Kubernetes mainly has two parts:
+
+1. Control Plane (Master Node)
+2. Worker Nodes
++-------------------------------------------------------------------------+
+|                                                                         |
+|                              CONTROL PLANE                              |
+|                                                                         |
+|  +------------------+     +------------------+     +-----------------+  |
+|  | kube-apiserver   |<--->|  kube-scheduler  |     | kube-controller |  |
+|  +------------------+     +------------------+     |     manager     |  |
+|        ^     ^                                     +-----------------+  |
+|        |     |            +------------------+                          |
+|        v     +----------->|       etcd       |                          |
+|   ( kubectl / UI )        +------------------+                          |
++--------|----------------------------------------------------------------+
+         |
+         | (Communicates via TLS)
+         v
++--------|----------------------------------------------------------------+
+|        v                     WORKER NODE                                |
+|  +------------------+     +------------------+     +-----------------+  |
+|  |     kubelet      |     |    kube-proxy    |     |    Container    |  |
+|  +------------------+     +------------------+     |     Runtime     |  |
+|        |                                           +--------|--------+  |
+|        v                                                    v           |
+|  +-------------------------------------------------------------------+  |
+|  | [ Pod ] ---> Contains Application Containers (e.g., containerd)    |  |
+|  +-------------------------------------------------------------------+  |
++-------------------------------------------------------------------------+
+
+
+
+1. Control Plane (Master Node)
+The Control Plane (Master Components)The Control Plane acts as the global brain of the cluster, maintaining the overall system health, scheduling workloads, and processing cluster events.kube-apiserver: The front door of the architecture that exposes the official Kubernetes API. It intercepts all command-line operations (from tools like kubectl), intercepts internal node traffic, and strictly handles request authentication, authorization, and validation.etcd: A highly available, distributed key-value store used as the backing storage engine. It serves as the single source of truth for all configuration and state records across the deployment.kube-scheduler: The optimization engineer that watches for newly created application pods that lack an assigned host node. It evaluates resource footprints, policy limitations, and affinity constraints to select the ideal worker node to execute them.kube-controller-manager: The core regulator process running various distinct background controllers. It continuously reviews the state of the cluster against your specified target configurations, managing node disruptions, replication loops, and active endpoints.cloud-controller-manager: A specialized controller that embeds cloud-provider-specific logic. It links your cluster directly to third-party services like cloud load balancers and storage volumes without polluting the core code.
