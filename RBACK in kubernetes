@@ -1,0 +1,56 @@
+RBAC with Kubernetes — Role, ClusterRole, RoleBinding, and ClusterRoleBinding.
+
+What is RBAC in general? 
+
+RBAC (Role-Based Access Control) is a security model used to control who can access what resources based on their role within an organization.
+Instead of assigning permissions directly to each user, permissions are assigned to roles, and users are assigned to those roles.
+
+Basic Components
+User: A person, application, or service account.
+Example: Alice, Bob, Jenkins service account.
+
+Role: A collection of permissions.
+Example:
+Administrator
+Developer
+Read-Only User
+
+Permission: An action that can be performed on a resource.
+Examples:
+Read files
+Create virtual machines
+Delete users
+
+Resource:
+The object being accessed.
+Examples:
+Server
+Database
+Kubernetes Pod
+Application
+
+Example:
+Suppose a company has three roles:
+
+Role	Permissions:
+1. Admin	Full access
+2. Developer	Create and modify applications
+3. Viewer	Read-only access
+
+Users are assigned roles:
+
+User	   Role
+Alice	   Admin
+Bob	     Developer
+Charlie	 Viewer
+
+When Bob logs in, he automatically gets all permissions assigned to the Developer role.
+
+Why RBAC is Used: 
+Simplifies permission management.
+Enforces the principle of least privilege.
+Reduces administrative effort.
+Improves security and compliance.
+Makes auditing easier.
+RBAC in Kubernetes
+
