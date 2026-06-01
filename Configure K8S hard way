@@ -1,0 +1,89 @@
+https://docs.rockylinux.org/10/labs/kubernetes-the-hard-way/lab4-certificate-authority/
+
+*** Infra details ****
+
+1. Update /etc/hosts file on master and worker nodes
+# cat /etc/hosts
+192.168.122.156 k8s-cp01
+192.168.122.221 k8s-w01
+192.168.122.45 k8s-w02
+
+2. Provisioning a CA and Generating TLS Certificates
+
+A. Certificate Authority
+  # openssl genrsa -out ca.key 4096
+  # openssl req -x509 -new -sha512 -noenc \
+    -key ca.key -days 3653 \
+    -config ca.conf \
+    -out ca.crt
+
+Results: ca.crt ca.key 
+
+B. Create Client and Server Certificates
+
+certs=(
+  "admin" "k8s-w01" "k8s-w02"
+  "kube-proxy" "kube-scheduler"
+  "kube-controller-manager"
+  "kube-api-server"
+  "service-accounts"
+)
+
+for i in ${certs[*]}; do
+  openssl genrsa -out "${i}.key" 4096
+
+  openssl req -new -key "${i}.key" -sha256 \
+    -config "ca.conf" -section ${i} \
+    -out "${i}.csr"
+
+  openssl x509 -req -days 3653 -in "${i}.csr" \
+    -copy_extensions copyall \
+    -sha256 -CA "ca.crt" \
+    -CAkey "ca.key" \
+    -CAcreateserial \
+    -out "${i}.crt"
+done
+
+The above command results will generate a private key, certificate request, and signed SSL certificate for each Kubernetes component. 
+You can list the generated files with the following command:
+
+ls -1 *.crt *.key *.csr
+
+3. Generating Kubernetes Configuration Files for Authentication
+
+The kubelet Kubernetes Configuration File:
+When generating kubeconfig files for Kubelets you must match the client certificate to the Kubelet's node name. 
+This will ensure Kubelets are properly authorized by the Kubernetes Node Authorizer.
+
+The following commands must be run in the same directory used to generate the SSL certificates during the Generating TLS Certificates lab.
+
+Generate a kubeconfig file for the node-0 and node-1 worker nodes:
+
+
+for host in k8s-w01 k8s-w02; do
+  kubectl config set-cluster kubernetes-the-hard-way \
+    --certificate-authority=ca.crt \
+    --embed-certs=true \
+    --server=https://server.kubernetes.local:6443 \
+    --kubeconfig=${host}.kubeconfig
+
+  kubectl config set-credentials system:node:${host} \
+    --client-certificate=${host}.crt \
+    --client-key=${host}.key \
+    --embed-certs=true \
+    --kubeconfig=${host}.kubeconfig
+
+  kubectl config set-context default \
+    --cluster=kubernetes-the-hard-way \
+    --user=system:node:${host} \
+    --kubeconfig=${host}.kubeconfig
+
+  kubectl config use-context default \
+    --kubeconfig=${host}.kubeconfig
+done
+Results:
+
+
+node-0.kubeconfig
+node-1.kubeconfig
+T
