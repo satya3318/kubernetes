@@ -427,3 +427,21 @@ NAME      STATUS   ROLES    AGE     VERSION
 k8s-w01   Ready    <none>   66m     v1.32.0
 k8s-w02   Ready    <none>   7m34s   v1.32.0
 
+7. Provisioning Pod Network Routes
+# {
+  SERVER_IP=$(grep server machines.txt | cut -d " " -f 1)
+  NODE_0_IP=$(grep k8s-w01 machines.txt | cut -d " " -f 1)
+  NODE_0_SUBNET=$(grep k8s-w01 machines.txt | cut -d " " -f 4)
+  NODE_1_IP=$(grep k8s-w02 machines.txt | cut -d " " -f 1)
+  NODE_1_SUBNET=$(grep k8s-w02 machines.txt | cut -d " " -f 4)
+}
+
+On k8s-cp01
+# ip route add ${NODE_0_SUBNET} via ${NODE_0_IP}
+# ip route add ${NODE_1_SUBNET} via ${NODE_1_IP}
+
+On k8s-w01
+# ip route add ${NODE_1_SUBNET} via ${NODE_1_IP}
+
+# On k8s-w02
+ip route add ${NODE_0_SUBNET} via ${NODE_0_IP}
