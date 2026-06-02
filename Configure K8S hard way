@@ -270,3 +270,147 @@ g. Verification
 Kubernetes control plane is running at https://127.0.0.1:6443
 
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+
+6. Bootstrapping the Kubernetes Worker Nodes
+
+# cat machines.txt
+192.168.122.156  k8s-cp01.kubernetes.local server.kubernetes.local k8s-cp01 server
+192.168.122.221 k8s-w01.kubernetes.local k8s-w01 10.200.0.0/24
+192.168.122.45 k8s-w02.kubernetes.local k8s-w02 10.200.1.0/24
+
+a. Update SUBNET 10-bridge.conf file 
+
+# cat 10-bridge.conf 
+{
+  "cniVersion": "1.0.0",
+  "name": "bridge",
+  "type": "bridge",
+  "bridge": "cni0",
+  "isGateway": true,
+  "ipMasq": true,
+  "ipam": {
+    "type": "host-local",
+    "ranges": [
+      [{"subnet": "10.200.0.0/24"}]
+    ],
+    "routes": [{"dst": "0.0.0.0/0"}]
+  }
+)
+
+b. Update SUBNET in kubelet-config.yaml file
+# cat configs/kubelet-config.yaml 
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: "/var/lib/kubelet/ca.crt"
+authorization:
+  mode: Webhook
+clusterDomain: "cluster.local"
+clusterDNS:
+  - "10.32.0.10"
+cgroupDriver: systemd
+containerRuntimeEndpoint: "unix:///var/run/containerd/containerd.sock"
+podCIDR: "SUBNET"
+resolvConf: "/etc/resolv.conf"
+runtimeRequestTimeout: "15m"
+tlsCertFile: "/var/lib/kubelet/kubelet.crt"
+tlsPrivateKeyFile: "/var/lib/kubelet/kubelet.key"
+
+Below is the command which will update subnet in the above 2 files and copy to the worker nodes.
+# for host in k8s-w01 k8s-w02; do
+  SUBNET=$(grep $host machines.txt | cut -d " " -f 4)
+  sed "s|SUBNET|$SUBNET|g" \
+    configs/10-bridge.conf > 10-bridge.conf 
+
+  sed "s|SUBNET|$SUBNET|g" \
+    configs/kubelet-config.yaml > kubelet-config.yaml
+
+  scp 10-bridge.conf kubelet-config.yaml \
+  root@$host:/tmp/
+done
+
+c. Copy required binaries and configuratio files to the worker nodes.
+
+# cd /opt/kubernetes-the-hard-way
+# for host in node-0 node-1; do
+  scp \
+    downloads/runc.amd64 \
+    downloads/crictl-v1.32.0-linux-amd64.tar.gz \
+    downloads/cni-plugins-linux-amd64-v1.6.2.tgz \
+    downloads/containerd-2.0.3-linux-amd64.tar.gz \
+    downloads/kubectl \
+    downloads/kubelet \
+    downloads/kube-proxy \
+    configs/99-loopback.conf \
+    configs/containerd-config.toml \
+    configs/kubelet-config.yaml \
+    configs/kube-proxy-config.yaml \
+    units/containerd.service \
+    units/kubelet.service \
+    units/kube-proxy.service \
+    root@$host:~/
+
+d. Copy certs file to the workers nodes
+# for host in k8s-w01 k8s-w02; do
+  ssh root@$host mkdir /var/lib/kubelet/
+  scp ca.crt root@$host:/var/lib/kubelet/
+  scp $host.crt root@$host:/var/lib/kubelet/kubelet.crt
+  scp $host.key root@$host:/var/lib/kubelet/kubelet.key
+done
+
+3. Copy Kubernetes Configuration Files
+for host in k8s-w01 k8s-w01; do
+  ssh root@$host "mkdir /var/lib/{kube-proxy,kubelet}"
+  scp kube-proxy.kubeconfig root@$host:/var/lib/kube-proxy/kubeconfig
+  scp ${host}.kubeconfig root@$host:/var/lib/kubelet/kubeconfig
+done
+
+*** On Worker npodes ***
+e. Create the installation directories:
+# mkdir -p \
+  /etc/cni/net.d \
+  /opt/cni/bin \
+  /var/lib/kubelet \
+  /var/lib/kube-proxy \
+  /var/lib/kubernetes \
+  /var/run/kubernetes
+
+f. Install the worker binaries:
+# cd /tmp  ==> Copied required files to the /tmp directory
+mkdir -p containerd
+# tar -xvf containerd-2.0.3-linux-amd64.tar.gz -C containerd
+# tar -xvf cni-plugins-linux-amd64-v1.6.2.tgz -C /opt/cni/bin/
+# tar -xvf crictl-v1.32.0-linux-amd64.tar.gz
+# mv runc.amd64 runc
+# chmod +x crictl kubectl kube-proxy kubelet runc 
+# cp crictl kubectl kube-proxy kubelet runc /usr/local/bin/
+# cp containerd/bin/* /bin/
+
+g. Configure CNI Networking: 
+Create the bridge network configuration file:
+# cp 10-bridge.conf 99-loopback.conf /etc/cni/net.d/
+
+h. Configure containerd
+Install the containerd configuration files:
+# mkdir -p /etc/containerd/
+# cp containerd-config.toml /etc/containerd/config.toml
+# cp containerd.service /etc/systemd/system/
+
+i. Configure the Kubelet
+Create the kubelet-config.yaml configuration file:
+# cp kubelet-config.yaml /var/lib/kubelet/
+# cp kubelet.service /etc/systemd/system/
+
+j. Configure the Kubernetes Proxy
+# cp kube-proxy-config.yaml /var/lib/kube-proxy/
+# cp kube-proxy.service /etc/systemd/system/
+
+k. Start the Worker Services
+# systemctl daemon-reload
+# systemctl enable containerd kubelet kube-proxy
+# systemctl start containerd kubelet kube-proxy
