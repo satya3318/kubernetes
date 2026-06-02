@@ -54,3 +54,24 @@ Improves security and compliance.
 Makes auditing easier.
 RBAC in Kubernetes
 
+**** Understanding Kubernetes RBAC ****
+Kubernetes RBAC (Role-Based Access Control) provides a powerful mechanism for controlling access to Kubernetes resources based on roles and permissions.
+
+In Kubernetes, ClusterRoles and Roles define the actions a user can perform within a cluster or namespace, respectively. You can assign these roles to Kubernetes subjects (users, groups, or service accounts) with role bindings and cluster role bindings. Kubernetes allows you to configure custom roles or use default user-facing roles, including, but not limited to:
+
+1. Cluster-admin: This “superuser” can perform any action on any resource in a cluster. You can use this in a ClusterRoleBinding to grant full control over every resource in the cluster (and in all namespaces) or in a RoleBinding to grant full control over every resource in the respective namespace.
+
+2. Admin: This role permits unlimited read/write access to resources within a namespace. This role can create roles and role bindings within a particular namespace. It does not permit write access to the namespace itself.
+
+3. Edit: This role grants read/write access within a given Kubernetes namespace. It cannot view or modify roles or role bindings. 
+
+4. View: This role allows read-only access within a given namespace. It does not allow viewing or modifying of roles or role binding
+
+Overview of RBAC in Kubernetes:
+RBAC in Kubernetes allows you to define roles and permissions for users, groups, or service accounts. It consists of four main components:
+
+Roles: Define a set of permissions within a namespace.
+RoleBindings: Associate roles with users, groups, or service accounts within a namespace.
+ClusterRoles: Similar to roles, but apply across the entire cluster.
+ClusterRoleBindings: Associate cluster roles with users, groups, or service accounts across the entire cluster.
+
