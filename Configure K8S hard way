@@ -420,3 +420,10 @@ k. Start the Worker Services
 # systemctl daemon-reload
 # systemctl enable containerd kubelet kube-proxy
 # systemctl start containerd kubelet kube-proxy
+
+h. Validattion on Master node
+# kubectl get nodes
+NAME      STATUS   ROLES    AGE     VERSION
+k8s-w01   Ready    <none>   66m     v1.32.0
+k8s-w02   Ready    <none>   7m34s   v1.32.0
+
