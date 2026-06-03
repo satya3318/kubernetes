@@ -20,9 +20,15 @@ Step 1: Set Hostname and Update Hosts file
 192.168.122.221 k8s-w01
 192.168.122.45 k8s-w02
 
-Step 2: Disable Swap Space on Each Node
+Step 2: Disable Swap Space on Each Node and verify cgroups
 # swapoff -a
 # sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+# stat -fc %T /sys/fs/cgroup/
+For cgroup v2, the output is cgroup2fs. ==> It should be grpup v2, if not, migrate to V2 by following steps suggest by OS OEM.
+For cgroup v1, the output is tmpfs.
+
+Deprecation of cgroup v1: FEATURE STATE: Kubernetes v1.35 [deprecated]. 
 
 Step 3: Adjust SELinux and Firewall Rules for Kubernetes
 # setenforce 0
@@ -35,6 +41,7 @@ On the master node, allow following ports in the firewall.
 # firewall-cmd --reload
 
 **** Port Details *****
+These firewall rules are typically opened on Kubernetes control-plane (master) nodes. Each port serves a specific Kubernetes component.
 Port	Protocol	Component	Purpose
 6443	TCP	kube-apiserver	Main Kubernetes API endpoint. Workers, kubectl, controllers, and schedulers connect here.
 2379	TCP	etcd	Client port for reading/writing cluster state to etcd.
@@ -47,8 +54,117 @@ Port	Protocol	Component	Purpose
 179	TCP	Calico BGP	Used when Calico operates in BGP mode for route exchange. Not required for all CNIs.
 4789	UDP	VXLAN	Overlay network tunnel used by Calico VXLAN, Flannel VXLAN, etc.
 
+On the Worker Nodes, allow beneath ports in the firewall,
+
+$ sudo firewall-cmd --permanent --add-port={179,10250,30000-32767}/tcp
+$ sudo firewall-cmd --permanent --add-port=4789/udp
+$ sudo firewall-cmd --reload
+
+**** Port Details *****
+These firewall ports are commonly opened on Kubernetes worker nodes to allow pod networking, node management, and external access to services.
+
+Port	Protocol	Component	Purpose
+179	TCP	Calico BGP	Route exchange between nodes when Calico is running in BGP mode.
+10250	TCP	kubelet	Allows the API server to communicate with the kubelet on the worker node.
+30000-32767	TCP	NodePort Services	Exposes Kubernetes services externally through node IPs.
+4789	UDP	VXLAN	Overlay network tunnel used by Calico VXLAN, Flannel VXLAN, etc.
+
+Step 4: Add Kernel Modules and Parameters
+# vi /etc/modules-load.d/containerd.conf
+overlay
+br_netfilter
+
+# modprobe overlay
+# modprobe br_netfilter
+
+Next, add the following kernel parameters, create a file and with following content,
+
+# vi /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+
+Now add these parameters by running below command
+
+$ sudo sysctl --system
 
 Kubernetes networking components need the kernel to:
 
 Forward packets between interfaces (ip_forward=1).
 Allow bridged traffic to be inspected by iptables (bridge-nf-call-* = 1).
+
+Step 5: Install Conatinerd Runtime
+Kubernetes requires a container runtime, and one of the most popular choices is containerd. But It is not available in the default package repositories of Rocky Linux or AlmaLinux, so add the following docker repo on all the nodes.
+
+# dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+# sudo dnf install containerd.io -y
+
+Modifying the system_cgroup
+On Linux, control groups (cgroups) manage allocated resources for processes. The kubelet and container runtime interact with cgroups to enforce resource management for pods, setting CPU/memory requests and limits. They must use the same cgroup driver and configuration.
+
+Two cgroup drivers exist:
+cgroupfs
+systemd.
+
+The cgroupfs driver is the default in the kubelet, interfacing directly with the cgroup filesystem. However, it’s not recommended with systemd as the init system due to potential conflicts. Instead, when using systemd, the systemd cgroup driver is preferred. Systemd acts as a cgroup manager, allocating a cgroup per systemd unit. This integration avoids the instability that can occur when using cgroupfs alongside systemd.Configure containerd so that it will use systemdcgroup, execute the following commands on each node.
+
+# containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
+# sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+
+# systemctl restart containerd
+# sudo systemctl enable containerd
+
+Step 6: Install Kubernetes tools
+
+Kubernetes tools like Kubeadm, kubectl and kubelet are not available in the default package repositories of Rocky Linux 9 or AlmaLinux 9. So, to install these tools, add the following repository on all the nodes.
+
+# This overwrites any existing configuration in /etc/yum.repos.d/kubernetes.repo
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.35/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.35/rpm/repodata/repomd.xml.key
+EOF
+
+
+[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstrap-token] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstrap-token] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+[bootstrap-token] Configured RBAC rules to allow the API server kubelet client certificate to access the kubelet API
+[bootstrap-token] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+[kubelet-finalize] Updating "/etc/kubernetes/kubelet.conf" to point to a rotatable kubelet client certificate and key
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+You can now join any number of control-plane nodes by copying certificate authorities
+and service account keys on each node and then running the following as root:
+
+  kubeadm join k8s-cp01:6443 --token 2k60lk.el4muy2hr2sdzpi1 \
+        --discovery-token-ca-cert-hash sha256:7e89f82f8a270925ef4c5855e3dd1ef1a571a3f4350842ad9ecb431a49738502 \
+        --control-plane 
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join k8s-cp01:6443 --token 2k60lk.el4muy2hr2sdzpi1 \
+        --discovery-token-ca-cert-hash sha256:7e89f82f8a270925ef4c5855e3dd1ef1a571a3f4350842ad9ecb431a49738502 
+
+
+Step 8: Install Calico Network Addon
