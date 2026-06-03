@@ -1,0 +1,54 @@
+Setup Kubernetes Cluster normal way:
+
+The configuration of the overall K8s cluster is divided into three major segments: 
+1. configuring the master node, 
+2. configuring two worker nodes, and possible issues. 
+
+The below section lists the common configuration required on all three nodes and illustrates the master configuration along the steps.
+
+Step 1: Set Hostname and Update Hosts file
+# hostnamectl set-hostname k8s-cp01
+# hostnamectl set-hostname k8s-w01
+# hostnamectl set-hostname k8s-w02
+
+# vi /etc/hosts
+192.168.122.156  k8s-cp01.kubernetes.local server.kubernetes.local k8s-cp01 server
+192.168.122.221 k8s-w01.kubernetes.local k8s-w01
+192.168.122.45 k8s-w02.kubernetes.local k8s-w02 
+
+192.168.122.156  k8s-cp01
+192.168.122.221 k8s-w01
+192.168.122.45 k8s-w02
+
+Step 2: Disable Swap Space on Each Node
+# swapoff -a
+# sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+Step 3: Adjust SELinux and Firewall Rules for Kubernetes
+# setenforce 0
+# vi  /etc/selinux/config or /etc/sysconfig/selinux 
+SELINUX=disabled
+
+On the master node, allow following ports in the firewall.
+# firewall-cmd --permanent --add-port={6443,2379,2380,10250,10251,10252,10257,10259,179}/tcp
+# firewall-cmd --permanent --add-port=4789/udp
+# firewall-cmd --reload
+
+**** Port Details *****
+Port	Protocol	Component	Purpose
+6443	TCP	kube-apiserver	Main Kubernetes API endpoint. Workers, kubectl, controllers, and schedulers connect here.
+2379	TCP	etcd	Client port for reading/writing cluster state to etcd.
+2380	TCP	etcd	Peer communication between etcd members in a multi-master cluster.
+10250	TCP	kubelet	Used by the API server to communicate with kubelets on nodes.
+10251	TCP	kube-scheduler (older versions)	Scheduler metrics/health endpoint. Often unused in newer Kubernetes versions.
+10252	TCP	kube-controller-manager (older versions)	Controller-manager metrics/health endpoint. Often unused in newer versions.
+10257	TCP	kube-controller-manager	Secure controller-manager endpoint.
+10259	TCP	kube-scheduler	Secure scheduler endpoint.
+179	TCP	Calico BGP	Used when Calico operates in BGP mode for route exchange. Not required for all CNIs.
+4789	UDP	VXLAN	Overlay network tunnel used by Calico VXLAN, Flannel VXLAN, etc.
+
+
+Kubernetes networking components need the kernel to:
+
+Forward packets between interfaces (ip_forward=1).
+Allow bridged traffic to be inspected by iptables (bridge-nf-call-* = 1).
