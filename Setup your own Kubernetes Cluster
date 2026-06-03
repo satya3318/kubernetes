@@ -97,7 +97,7 @@ Step 5: Install Conatinerd Runtime
 Kubernetes requires a container runtime, and one of the most popular choices is containerd. But It is not available in the default package repositories of Rocky Linux or AlmaLinux, so add the following docker repo on all the nodes.
 
 # dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-# sudo dnf install containerd.io -y
+# dnf install containerd.io -y
 
 Modifying the system_cgroup
 On Linux, control groups (cgroups) manage allocated resources for processes. The kubelet and container runtime interact with cgroups to enforce resource management for pods, setting CPU/memory requests and limits. They must use the same cgroup driver and configuration.
@@ -109,10 +109,10 @@ systemd.
 The cgroupfs driver is the default in the kubelet, interfacing directly with the cgroup filesystem. However, it’s not recommended with systemd as the init system due to potential conflicts. Instead, when using systemd, the systemd cgroup driver is preferred. Systemd acts as a cgroup manager, allocating a cgroup per systemd unit. This integration avoids the instability that can occur when using cgroupfs alongside systemd.Configure containerd so that it will use systemdcgroup, execute the following commands on each node.
 
 # containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
-# sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+# sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
 
 # systemctl restart containerd
-# sudo systemctl enable containerd
+# systemctl enable containerd
 
 Step 6: Install Kubernetes tools
 
@@ -128,7 +128,17 @@ gpgcheck=1
 gpgkey=https://pkgs.k8s.io/core:/stable:/v1.35/rpm/repodata/repomd.xml.key
 EOF
 
+Note: At time of writing this post, Kubernetes 1.35 version was available, that’s why I have mentioned v1.28 while adding the repo.
 
+Next, install Kubernetes tools by running following dnf command,
+
+# dnf   install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+# systemctl enable --now kubelet
+
+Step 7: Install Kubernetes Cluster on Rocky Linux 9 / Alma Linux 9
+
+# kubeadm init --control-plane-endpoint=k8s-cp01
+...
 [bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
 [bootstrap-token] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
 [bootstrap-token] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
@@ -166,5 +176,124 @@ Then you can join any number of worker nodes by running the following on each as
 kubeadm join k8s-cp01:6443 --token 2k60lk.el4muy2hr2sdzpi1 \
         --discovery-token-ca-cert-hash sha256:7e89f82f8a270925ef4c5855e3dd1ef1a571a3f4350842ad9ecb431a49738502 
 
+** From the output above make a note of the command which will be executed on the worker nodes to join the Kubernetes cluster.
+
+To start interacting with Kubernetes cluster, run the following commands on the master node.
+
+$ mkdir -p $HOME/.kube
+$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+$ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Sample output afte cluster creation: 
+[root@k8s-cp01 ~]# kubectl get nodes
+NAME       STATUS     ROLES           AGE   VERSION
+k8s-cp01   NotReady   control-plane   82m   v1.35.5 ==> Not ready because of CNI plugin not installed
+
+[root@k8s-cp01 ~]# kubectl get all -A
+NAMESPACE     NAME                                   READY   STATUS    RESTARTS   AGE
+kube-system   pod/coredns-7d764666f9-8vv9m           0/1     Pending   0          82m ==>
+kube-system   pod/coredns-7d764666f9-p8kxf           0/1     Pending   0          82m ==> Peding because of CNI plugin not installed
+kube-system   pod/etcd-k8s-cp01                      1/1     Running   2          82m
+kube-system   pod/kube-apiserver-k8s-cp01            1/1     Running   3          82m
+kube-system   pod/kube-controller-manager-k8s-cp01   1/1     Running   0          82m
+kube-system   pod/kube-proxy-vpxxn                   1/1     Running   0          82m
+kube-system   pod/kube-scheduler-k8s-cp01            1/1     Running   2          82m
+
+NAMESPACE     NAME                 TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+default       service/kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP                  82m
+kube-system   service/kube-dns     ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   82m
+
+NAMESPACE     NAME                        DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+kube-system   daemonset.apps/kube-proxy   1         1         1       1            1           kubernetes.io/os=linux   82m
+
+NAMESPACE     NAME                      READY   UP-TO-DATE   AVAILABLE   AGE
+kube-system   deployment.apps/coredns   0/2     2            0           82m
+
+NAMESPACE     NAME                                 DESIRED   CURRENT   READY   AGE
+kube-system   replicaset.apps/coredns-7d764666f9   2         2         0       82m
+[root@k8s-cp01 ~]# 
 
 Step 8: Install Calico Network Addon
+Calico network addon is required on Kubernetes cluster to enable communication between pods, to make DNS service function with the cluster and to make the nodes status as Ready.
+
+In order to install calico CNI (Container Network Interface) addon, run following kubectl commands from the master node only.
+
+Refer the link https://docs.tigera.io/calico/latest/getting-started/kubernetes/self-managed-onprem/onpremises#install-calico for installation
+
+Concepts
+Recommended: Tigera Operator
+Calico is installed by an operator which manages the installation, upgrade, and general lifecycle of a Calico cluster. The operator is installed directly on the cluster as a Deployment, and is configured through one or more custom Kubernetes API resources.
+
+Calico manifests
+Calico can also be installed using raw manifests as an alternative to the operator. The manifests contain the necessary resources for installing Calico on each node in your Kubernetes cluster. Using manifests is not recommended as they cannot automatically manage the lifecycle of the Calico as the operator does. However, manifests may be useful for clusters that require highly specific modifications to the underlying Kubernetes resources.
+
+a. Install the Tigera Operator and custom resource definitions.
+
+# kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/v1_crd_projectcalico_org.yaml
+# kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/tigera-operator.yaml
+
+b. Download the custom resources necessary to configure Calico.
+
+:::tip Automatic data plane deployment You can select either eBPF or iptables to be deployed automatically. :::
+
+eBPF
+curl -O https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/custom-resources-bpf.yaml
+
+** If you wish to customize the Calico install, customize the downloaded custom-resources.yaml manifest locally.
+
+c. Create the manifest to install Calico.
+
+eBPF
+# kubectl create -f custom-resources-bpf.yaml
+
+d .Monitor the deployment by running the following command:
+
+# kubectl get tigerastatus
+
+After a few minutes, all the Calico components display True in the AVAILABLE column.
+
+eBPF
+Expected output
+[root@k8s-cp01 ~]# kubectl get tigerastatus
+NAME                AVAILABLE   PROGRESSING   DEGRADED   SINCE   MESSAGE
+apiserver           True        False         False      4m29s   All objects available
+calico              True        False         False      4m34s   All objects available
+goldmane            True        False         False      4m9s    All objects available
+ippools             True        False         False      5m50s   All objects available
+kubeproxy-monitor   True        False         False      5m49s   All objects available
+tiers               True        False         False      4m24s   All objects available
+whisker             True        False         False      4m19s   All objects available
+
+Step 9: Join the worker nodes to the cluster, run following Kubeadm command from the worker nodes.
+***
+Noete Install conatinerd, kubelet, kubeadm as mentioned above
+
+[root@k8s-w02 ~]# kubeadm join k8s-cp01:6443 --token 2k60lk.el4muy2hr2sdzpi1 \
+        --discovery-token-ca-cert-hash sha256:7e89f82f8a270925ef4c5855e3dd1ef1a571a3f4350842ad9ecb431a49738502 
+[preflight] Running pre-flight checks
+[preflight] Reading configuration from the "kubeadm-config" ConfigMap in namespace "kube-system"...
+[preflight] Use 'kubeadm init phase upload-config kubeadm --config your-config-file' to re-upload it.
+W0603 14:42:33.400591   11642 utils.go:69] The recommended value for "bindAddress" in "KubeProxyConfiguration" is: ::; the provided value is: 0.0.0.0
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/instance-config.yaml"
+[patches] Applied patch of type "application/strategic-merge-patch+json" to target "kubeletconfiguration"
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Starting the kubelet
+[kubelet-check] Waiting for a healthy kubelet at http://127.0.0.1:10248/healthz. This can take up to 4m0s
+[kubelet-check] The kubelet is healthy after 501.722288ms
+[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap
+
+This node has joined the cluster:
+* Certificate signing request was sent to apiserver and a response was received.
+* The Kubelet was informed of the new secure connection details.
+
+Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
+
+[root@k8s-cp01 ~]# kubectl get nodes
+NAME       STATUS   ROLES           AGE     VERSION
+k8s-cp01   Ready    control-plane   118m    v1.35.5
+k8s-w01    Ready    <none>          7m54s   v1.35.5
+k8s-w02    Ready    <none>          2m35s   v1.35.5
+[root@k8s-cp01 ~]# 
+
+Step 9: Test Kubernetes Cluster Installation
