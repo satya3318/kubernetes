@@ -347,3 +347,53 @@ a82921b02501dfdc, started, k8s-cp02, https://192.168.122.170:2380, https://192.1
 ac95f176a5833545, started, k8s-cp03, https://192.168.122.240:2380, https://192.168.122.240:2379, false
 [root@k8s-cp01 etcd]# 
 [root@k8s-cp01 etcd]# 
+
+# Backup and remove old cert
+cp /etc/kubernetes/pki/apiserver.crt /etc/kubernetes/pki/apiserver.crt.bak
+cp /etc/kubernetes/pki/apiserver.key /etc/kubernetes/pki/apiserver.key.bak
+rm /etc/kubernetes/pki/apiserver.{crt,key}
+
+# Regenerate with all SANs
+kubeadm init phase certs apiserver \
+  --control-plane-endpoint lb-nginx:6443 \
+  --apiserver-cert-extra-sans lb-nginx,192.168.122.1,k8s-cp01,k8s-cp02,k8s-cp03
+
+# Verify lb-nginx is in the cert
+openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -text | grep -A10 "Subject Alternative"
+
+# Restart kubelet
+systemctl restart kubelet
+sleep 10
+
+# Update kubeconfigs
+kubectl config set-cluster kubernetes \
+  --server=https://lb-nginx:6443 \
+  --kubeconfig /etc/kubernetes/admin.conf
+
+kubectl config set-cluster kubernetes \
+  --server=https://lb-nginx:6443 \
+  --kubeconfig ~/.kube/config
+
+# Copy admin.conf from cp01 to cp03
+ssh k8s-cp01 "cat /etc/kubernetes/admin.conf" | ssh k8s-cp03 "mkdir -p ~/.kube && cat > ~/.kube/config"
+Or directly on cp02 and cp03:
+bash# Run on cp02
+mkdir -p ~/.kube
+scp k8s-cp01:/etc/kubernetes/admin.conf ~/.kube/config
+chown $(id -u):$(id -g) ~/.kube/config
+
+# Run on cp03
+mkdir -p ~/.kube
+scp k8s-cp01:/etc/kubernetes/admin.conf ~/.kube/config
+chown $(id -u):$(id -g) ~/.kube/config
+Also update the server endpoint in the copied config
+Since we changed the endpoint to lb-nginx, update it on cp02 and cp03 after copying:
+bashkubectl config set-cluster kubernetes \
+  --server=https://lb-nginx:6443 \
+  --kubeconfig ~/.kube/config
+Verify on each node
+bashkubectl get nodes
+kubectl get pods -n kube-system
+The kubeconfig is safe to copy — it contains the cluster CA cert and admin credentials which are the same across all control plane nodes.You said: NAME                         READY   STATUS    RESTARTS        AGE   IP                NODE      NOMINATED NODE   READINESS GATESNAME                         READY   STATUS    RESTARTS        AGE   IP                NODE      NOMINATED NODE   READINESS GATES
+web-app01-7bfdbd77d8-2jkhf   1/1     Running   1 (5h54m ago)   25h   192.168.191.199   k8s-w01   <none>           <none>
+web-app01-7bfdbd77d8-qwq78   1/1     Running   2 (5h54m ago)   8d    192.168.191.201   k8s-w01   <none>           <none>. Running on same nodes, how to start on differnet nodes6:02 PMClaude responded: Your pods are both scheduled on k8s-w01.Your pods are both scheduled on k8s-w01. To spread them across different nodes, add a Pod Anti-Affinity rule to your deployment:
