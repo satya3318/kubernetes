@@ -298,8 +298,6 @@ k8s-w02    Ready    <none>          2m35s   v1.35.5
 
 Step 9: Test Kubernetes Cluster Installation
 
-
-
 kubeadm join 10.10.10.10:6443 \
 --token abcdef.1234567890 \
 --discovery-token-ca-cert-hash sha256:xxxxx \
@@ -347,6 +345,14 @@ a82921b02501dfdc, started, k8s-cp02, https://192.168.122.170:2380, https://192.1
 ac95f176a5833545, started, k8s-cp03, https://192.168.122.240:2380, https://192.168.122.240:2379, false
 [root@k8s-cp01 etcd]# 
 [root@k8s-cp01 etcd]# 
+
+Step 1: Update kubeadm-config configmap
+bashkubectl -n kube-system edit cm kubeadm-config
+Change:
+yamlcontrolPlaneEndpoint: k8s-cp01:6443
+To:
+yamlcontrolPlaneEndpoint: <NGINX_IP>:6443
+Step 2: Check current apiserver cert SANs
 
 # Backup and remove old cert
 cp /etc/kubernetes/pki/apiserver.crt /etc/kubernetes/pki/apiserver.crt.bak
