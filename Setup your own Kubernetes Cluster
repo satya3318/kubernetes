@@ -325,3 +325,25 @@ kubeadm join k8s-cp01:6443 \
 --discovery-token-ca-cert-hash sha256:xxxxx \
 --control-plane \
 --certificate-key 1234567890abcdef1234567890abcdef
+
+
+[root@k8s-cp01 etcd]# export ETCDCTL_API=3
+[root@k8s-cp01 etcd]# etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  endpoint health
+https://127.0.0.1:2379 is healthy: successfully committed proposal: took = 15.065709ms
+[root@k8s-cp01 etcd]# 
+[root@k8s-cp01 etcd]# etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  member list
+56d928b4f5d71576, started, k8s-cp01, https://192.168.122.156:2380, https://192.168.122.156:2379, false
+a82921b02501dfdc, started, k8s-cp02, https://192.168.122.170:2380, https://192.168.122.170:2379, false
+ac95f176a5833545, started, k8s-cp03, https://192.168.122.240:2380, https://192.168.122.240:2379, false
+[root@k8s-cp01 etcd]# 
+[root@k8s-cp01 etcd]# 
